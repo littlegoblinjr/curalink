@@ -1,0 +1,33 @@
+/* App.css - Specialized Animations */
+.spin {
+  animation: spin 2s linear infinite;
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Additional Premium Touches */
+.chat-history div.assistant {
+  border-top-left-radius: 4px;
+  background-image: linear-gradient(to right, rgba(56, 189, 248, 0.05), transparent);
+}
+
+.chat-history div.user {
+  border-top-right-radius: 4px;
+  box-shadow: 0 4px 15px rgba(56, 189, 248, 0.3);
+}
+
+input::placeholder {
+  color: rgba(255, 255, 255, 0.2);
+}
+
+.thought-log::-webkit-scrollbar {
+  width: 4px;
+}

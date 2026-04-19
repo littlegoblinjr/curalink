@@ -1,0 +1,15 @@
+fastapi
+uvicorn
+langchain
+langchain-openai
+httpx
+pymongo
+pydantic
+python-dotenv
+motor
+numpy
+langchain-text-splitters
+jinja2
+python-multipart
+certifi
+dnspython
