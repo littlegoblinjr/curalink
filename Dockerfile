@@ -10,9 +10,12 @@ RUN npm run build
 # Setup Backend
 FROM python:3.11-slim
 WORKDIR /app
+RUN pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu
 COPY backend/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 COPY backend/ .
+# Bake embedding weights so cold start on Render/HF does not download at runtime
+RUN python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('nomic-ai/nomic-embed-text-v1.5', trust_remote_code=True)"
 # Copy static frontend build to backend/static to be served by FastAPI
 COPY --from=frontend-build /app/frontend/dist /app/static
 

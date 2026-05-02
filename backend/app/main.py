@@ -17,10 +17,13 @@ app = FastAPI(
 @app.on_event("startup")
 async def startup_db_client():
     try:
-        # Non-blocking startup to prevent HF 503 timeouts
         import asyncio
+        from app.utils.rag_utils import preload_local_embedding_model
+
         asyncio.create_task(connect_to_mongo())
         print("MongoDB connection initiated in background.")
+        asyncio.create_task(asyncio.to_thread(preload_local_embedding_model))
+        print("Embedding model preload scheduled (local SentenceTransformer if no EMBEDDING_HTTP_URL).")
     except Exception as e:
         print(f"Startup DB Error: {e}")
 

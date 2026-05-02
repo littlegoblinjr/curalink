@@ -19,4 +19,10 @@ class Settings:
     LM_STUDIO_URL: str = os.getenv("LM_STUDIO_URL", "http://localhost:1234/v1")
     LM_STUDIO_MODEL: str = os.getenv("LM_STUDIO_MODEL", "qwen2.5-3b-instruct")
 
+    # Embeddings: leave HTTP URL empty to use bundled SentenceTransformer (768-dim nomic by default).
+    # Set to LM Studio / OpenAI-compatible embeddings URL to use remote embeddings instead.
+    EMBEDDING_HTTP_URL: str = os.getenv("EMBEDDING_HTTP_URL", "") or os.getenv("EMBED_URL", "")
+    EMBEDDING_HTTP_MODEL: str = os.getenv("EMBEDDING_HTTP_MODEL", "nomic-embed-text-v1.5")
+    EMBEDDING_MODEL: str = os.getenv("EMBEDDING_MODEL", "nomic-ai/nomic-embed-text-v1.5")
+
 settings = Settings()
