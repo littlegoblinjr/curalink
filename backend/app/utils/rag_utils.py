@@ -13,7 +13,7 @@ _st_model: Optional[object] = None
 
 
 def _get_sentence_transformer():
-    """Lazy-load once; same 768-d output as nomic-embed-text-v1.5 in LM Studio."""
+    """Lazy-load once; default all-MiniLM-L6-v2 (384-d). Nomic-style models need trust_remote_code."""
     global _st_model
     if _st_model is not None:
         return _st_model
@@ -22,9 +22,10 @@ def _get_sentence_transformer():
             return _st_model
         from sentence_transformers import SentenceTransformer
 
+        trust = "nomic" in settings.EMBEDDING_MODEL.lower()
         _st_model = SentenceTransformer(
             settings.EMBEDDING_MODEL,
-            trust_remote_code=True,
+            trust_remote_code=trust,
         )
     return _st_model
 
