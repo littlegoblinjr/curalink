@@ -1,19 +1,29 @@
 import asyncio
 import re
-import os
 from langchain_openai import ChatOpenAI
 from app.services.tools import search_pubmed_metadata, fetch_pubmed_abstracts, search_openalex, search_clinical_trials, fetch_pmc_fulltext
 from app.utils.ranking import normalize_results, rank_and_filter
 from app.config.database import get_chat_history, save_session_results, get_session_results
+from app.config.config import settings
 from pydantic import BaseModel, Field
 from typing import List, Dict, Any
 
-llm = ChatOpenAI(
-    base_url=os.getenv("LM_STUDIO_URL", "http://localhost:1234/v1"),
-    api_key="not-needed",
-    model="qwen2.5-3b-instruct",
-    temperature=0.1
-)
+def _make_llm() -> ChatOpenAI:
+    if settings.GROQ_API_KEY.strip():
+        return ChatOpenAI(
+            base_url=settings.GROQ_BASE_URL.rstrip("/"),
+            api_key=settings.GROQ_API_KEY,
+            model=settings.GROQ_MODEL,
+            temperature=0.1,
+        )
+    return ChatOpenAI(
+        base_url=settings.LM_STUDIO_URL.rstrip("/"),
+        api_key="not-needed",
+        model=settings.LM_STUDIO_MODEL,
+        temperature=0.1,
+    )
+
+llm = _make_llm()
 
 class SearchQueries(BaseModel):
     pubmed: str = Field(description="Query optimized for medical literature (PubMed)")
