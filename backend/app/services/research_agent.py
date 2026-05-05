@@ -30,14 +30,34 @@ class SearchQueries(BaseModel):
     pubmed: str = Field(description="Query optimized for medical literature (PubMed)")
     openalex: str = Field(description="Query optimized for general academic papers (OpenAlex)")
 
+async def _extract_medical_context(history: List[Dict[str, Any]]) -> str:
+    """Extracts a tight keyword-focused summary of the previous medical conversation."""
+    if not history: return ""
+    
+    # Focus on the last few turns for relevance and token efficiency
+    recent_history = history[-6:]
+    formatted = "\n".join([f"{m['role']}: {m['content'][:300]}" for m in recent_history])
+    
+    context_prompt = f"""
+    Summarize the key medical entities and specific treatments discussed in this conversation history. 
+    Focus on KEYWORDS and maintaining clinical continuity. Limit to 60 words.
+    
+    HISTORY:
+    {formatted}
+    """
+    try:
+        # Use a high-speed inference for the summary
+        res = await llm.ainvoke(context_prompt)
+        return res.content.strip()
+    except:
+        return ""
+
 async def run_research(query: str, disease: str, session_id: str, location: str = None):
     history = await get_chat_history(session_id)
-    chat_context = ""
-    if history:
-        chat_context = "\n".join([f"{m['role']}: {m['content']}" for m in history])
+    chat_summary = await _extract_medical_context(history)
 
     # --- STEP 0: Routing & Intent ---
-    intent_prompt = f"Decide if '{query}' needs NEW_SEARCH or DEEP_DIVE (follow-up). RETURN ONE WORD."
+    intent_prompt = f"CONVERSATION SUMMARY: {chat_summary}\n\nDecide if the NEW QUERY: '{query}' needs NEW_SEARCH or DEEP_DIVE (refining existing data). RETURN ONE WORD."
     intent_res = await llm.ainvoke(intent_prompt)
     intent = intent_res.content.strip().upper()
     cached_library = await get_session_results(session_id)
@@ -118,6 +138,8 @@ async def run_research(query: str, disease: str, session_id: str, location: str 
     # --- STEP 5: Final Neural Briefing ---
     final_prompt = f"""
     You are a Senior Medical Assistant at CuraLink. Brief the user on {query} regarding {disease}.
+    
+    CONVERSATIONAL PROGRESSION: {chat_summary if chat_summary else "Initial Query"}
     Target Location: {location if location else "Global"}
     
     EVIDENCE: {context_block[:8000]}
