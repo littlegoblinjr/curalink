@@ -1,5 +1,6 @@
 import asyncio
 import re
+from app.utils.eval_utils import run_quality_check
 from langchain_openai import ChatOpenAI
 from app.services.tools import search_pubmed_metadata, fetch_pubmed_abstracts, search_openalex, search_clinical_trials, fetch_pmc_fulltext
 from app.utils.ranking import normalize_results, rank_and_filter
@@ -128,7 +129,12 @@ async def run_research(query: str, disease: str, session_id: str, location: str 
     4. CITATIONS: Cite every claim with [1], [2].
     """
     final_response = await llm.ainvoke(final_prompt)
+    # --- STEP 6: Ragas Evaluation ---
+    contexts = [str(r.get('summary', r.get('title', ''))) for r in top_results]
+    eval_result = await run_quality_check(query, contexts, final_response.content)
+    
     thought_process = f"Analyzed {len(top_results)} sources. Focus: {location if location else 'Global'}. Decision: {intent}."
+    thought_process += f" | Quality: {'PASSED' if eval_result['passed'] else 'LOW'} (Faithfulness: {eval_result['scores'].get('faithfulness', 0):.2f}, Relevancy: {eval_result['scores'].get('answer_relevancy', 0):.2f})"
     
     return {
         "answer": final_response.content,
