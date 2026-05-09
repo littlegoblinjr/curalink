@@ -126,11 +126,15 @@ async def delete_session(session_id: str):
         MEMORY_DB.pop(f"arch_{session_id}", None)
 
 
-async def save_user(email: str, name: str):
+async def save_user(email: str, name: str, hashed_password: str = None):
     if db_instance.db is not None:
+        data = {"name": name, "last_login": datetime.now()}
+        if hashed_password:
+            data["hashed_password"] = hashed_password
+            
         await db_instance.db.users.update_one(
             {"email": email},
-            {"$set": {"name": name, "last_login": datetime.now()}},
+            {"$set": data},
             upsert=True
         )
 

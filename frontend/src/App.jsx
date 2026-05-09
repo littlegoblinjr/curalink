@@ -399,7 +399,8 @@ function App() {
       const response = await axios.post('/api/v1/auth/verify-otp', {
         email: authForm.email,
         otp: otpValue,
-        name: authMode === 'signup' ? authForm.name : undefined
+        name: authMode === 'signup' ? authForm.name : undefined,
+        password: authMode === 'signup' ? authForm.password : undefined
       });
       if (response.data.status === 'success') {
         // Persist session after OTP signup

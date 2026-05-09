@@ -3,7 +3,10 @@ import resend
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, EmailStr
 from typing import Optional
+from passlib.context import CryptContext
 from app.config.config import settings
+
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 router = APIRouter()
 resend.api_key = settings.RESEND_API_KEY
@@ -19,6 +22,7 @@ class OTPVerify(BaseModel):
     email: EmailStr
     otp: str
     name: Optional[str] = None
+    password: Optional[str] = None
 
 class LoginRequest(BaseModel):
     email: EmailStr
@@ -29,7 +33,14 @@ async def login_v1(request: LoginRequest):
     from app.config.database import get_user
     user = await get_user(request.email)
     if user:
-        return {"status": "success", "name": user.get("name")}
+        hashed_password = user.get("hashed_password")
+        if hashed_password and pwd_context.verify(request.password, hashed_password):
+            return {"status": "success", "name": user.get("name")}
+        elif not hashed_password:
+            # Fallback for old accounts without passwords (optional: force reset)
+            return {"status": "success", "name": user.get("name")}
+        else:
+            raise HTTPException(status_code=401, detail="Invalid password")
     
     raise HTTPException(status_code=404, detail="Account not found")
 
@@ -73,7 +84,9 @@ async def verify_otp(request: OTPVerify):
             existing = await get_user(request.email)
             if existing:
                 raise HTTPException(status_code=409, detail="An account with this email already exists. Please log in.")
-            await save_user(request.email, request.name)
+            
+            hashed_password = pwd_context.hash(request.password) if request.password else None
+            await save_user(request.email, request.name, hashed_password=hashed_password)
 
         del OTP_STORE[request.email]
         return {"status": "success", "token": "mock-jwt-token"}
