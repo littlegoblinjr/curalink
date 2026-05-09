@@ -4,10 +4,11 @@ from app.utils.eval_utils import run_quality_check
 from langchain_openai import ChatOpenAI
 from app.services.tools import search_pubmed_metadata, fetch_pubmed_abstracts, search_openalex, search_clinical_trials, fetch_pmc_fulltext
 from app.utils.ranking import normalize_results, rank_and_filter
-from app.config.database import get_chat_history, save_session_results, get_session_results
+from app.config.database import get_chat_history, save_session_results, get_session_results, save_to_knowledge_graph, query_knowledge_graph
 from app.config.config import settings
 from pydantic import BaseModel, Field
 from typing import List, Dict, Any
+import json
 
 def _make_llm() -> ChatOpenAI:
     if settings.GROQ_API_KEY.strip():
@@ -53,6 +54,35 @@ async def _extract_medical_context(history: List[Dict[str, Any]]) -> str:
         return ""
 
 async def run_research(query: str, disease: str, session_id: str, location: str = None):
+    # --- STEP -1: Input Guardrail & Safety ---
+    safety_prompt = f"""
+    Analyze the following user query for a Medical Research Assistant.
+    QUERY: "{query}" regarding "{disease}"
+    
+    RULES:
+    1. If the query is absolute gibberish, nonsensical, or clearly "bullshit", return 'BLOCK: NONSENSE'.
+    2. If the query is dangerous (asking for help with self-harm, illegal manufacturing, or life-threatening pseudoscience), return 'BLOCK: DANGER'.
+    3. If the query is completely unrelated to healthcare, medicine, or clinical research (e.g. "how to bake a cake"), return 'BLOCK: OFF_TOPIC'.
+    4. If the query is safe and medically relevant, return 'PASS'.
+    
+    RETURN ONLY ONE LINE.
+    """
+    try:
+        safety_res = await llm.ainvoke(safety_prompt)
+        safety_status = safety_res.content.strip().upper()
+        
+        if safety_status.startswith("BLOCK"):
+            reason = "nonsensical" if "NONSENSE" in safety_status else "off-topic"
+            if "DANGER" in safety_status: reason = "violates safety guidelines"
+            
+            yield json.dumps({
+                "type": "error", 
+                "message": f"Query Refused: Your input appears to be {reason}. CuraLink only processes clinical and medically relevant research requests."
+            }) + "\n"
+            return
+    except Exception as e:
+        print(f"Safety Guardrail Error: {e}")
+
     history = await get_chat_history(session_id)
     chat_summary = await _extract_medical_context(history)
 
@@ -85,30 +115,56 @@ async def run_research(query: str, disease: str, session_id: str, location: str 
         loc_clause = f" specifically in {location}" if location else ""
         expansion_prompt = f"Generate 2 medical queries for {query} about {disease}{loc_clause}. MUST include '{disease}'."
         
-        try:
-            structured_llm = llm.with_structured_output(SearchQueries)
-            queries = await structured_llm.ainvoke(expansion_prompt)
-            final_pubmed = f"{disease} {queries.pubmed}"
-            final_openalex = f"{disease} {queries.openalex}"
-        except:
-            final_pubmed = f"{disease} {query}"
-            final_openalex = f"{disease} {query}"
-
-        # CLINICAL TRIALS: Focus on the Condition + Intent
-        # WE EXCLUDE location from the API call itself because the API expects conditions,
-        # not city names. We will handle location relevance in the Ranking layer.
-        trial_query = f"{disease} {query}"
-
-        pubmed_titles = await search_pubmed_metadata(final_pubmed, limit=40)
-        shortlist = rank_and_filter(normalize_results(pubmed_titles, "pubmed"), final_pubmed, disease, top_n=12)
+        # -- KNOWLEDGE GRAPH FIRST PASS --
+        graph_candidates = await query_knowledge_graph(disease, limit=100)
+        print(f"[ARCHIVE] Scanning Global Knowledge Graph... Found {len(graph_candidates)} previously indexed papers.")
         
-        pubmed_full, openalex_res, clinical_res = await asyncio.gather(
-            fetch_pubmed_abstracts([c['url'].split('/')[-2] for c in shortlist if 'pubmed' in c['url']]),
-            search_openalex(final_openalex, limit=12),
-            search_clinical_trials(trial_query, limit=15)
-        )
-        all_candidates = normalize_results(pubmed_full, "pubmed") + normalize_results(openalex_res, "openalex") + normalize_results(clinical_res, "clinical_trials")
-        await save_session_results(session_id, all_candidates)
+        # Rank graph knowledge to see if it satisfies the user's intent 
+        ranked_graph = rank_and_filter(graph_candidates, query, disease, top_n=20)
+        
+        # Determine if we have a critical mass of HIGH-QUALITY documents (score > 50 means excellent intent + disease overlap)
+        high_quality_docs = [doc for doc in ranked_graph if doc.get('score', 0) > 50]
+        
+        all_candidates = []
+        fresh_candidates = []
+        
+        if len(high_quality_docs) >= 3:
+            # Short-circuit: Graph already knows the answer! Skip live searches.
+            intent = "KNOWLEDGE_GRAPH_CACHE_HIT"
+            print(f"[ARCHIVE] Knowledge Graph Sufficient: Found {len(high_quality_docs)} highly relevant clinical resources locally. Bypassing external latency pipelines...")
+            all_candidates = ranked_graph
+            
+        else:
+            # Fallback: Live Deep Web Search
+            print("[ARCHIVE] Knowledge Graph insufficient for specific intent. Instantiating deep-web clinical retrieval protocol...")
+            try:
+                structured_llm = llm.with_structured_output(SearchQueries)
+                queries = await structured_llm.ainvoke(expansion_prompt)
+                final_pubmed = f"{disease} {queries.pubmed}"
+                final_openalex = f"{disease} {queries.openalex}"
+            except:
+                final_pubmed = f"{disease} {query}"
+                final_openalex = f"{disease} {query}"
+
+            trial_query = f"{disease} {query}"
+            pubmed_titles = await search_pubmed_metadata(final_pubmed, limit=40)
+            shortlist = rank_and_filter(normalize_results(pubmed_titles, "pubmed"), final_pubmed, disease, top_n=12)
+            
+            pubmed_full, openalex_res, clinical_res = await asyncio.gather(
+                fetch_pubmed_abstracts([c['url'].split('/')[-2] for c in shortlist if 'pubmed' in c['url']]),
+                search_openalex(final_openalex, limit=12),
+                search_clinical_trials(trial_query, limit=15)
+            )
+            fresh_candidates = normalize_results(pubmed_full, "pubmed") + normalize_results(openalex_res, "openalex") + normalize_results(clinical_res, "clinical_trials")
+
+            # Blend graph results into the newly discovered candidates
+            known_urls = {p.get('url') for p in fresh_candidates if p.get('url')}
+            graph_new = [p for p in graph_candidates if p.get('url') not in known_urls]
+            all_candidates = fresh_candidates + graph_new
+
+            # Save fresh discoveries into both session archive and global knowledge graph
+            await save_session_results(session_id, all_candidates)
+            await save_to_knowledge_graph(disease, fresh_candidates)
 
     top_results = rank_and_filter(all_candidates, query, disease, top_n=8)
 
@@ -135,6 +191,9 @@ async def run_research(query: str, disease: str, session_id: str, location: str 
         if res.get('eligibility'): context_block += f"ELIGIBILITY: {res['eligibility'][:500]}\n"
         context_block += f"Data: {display_text[:1200]}\n\n"
     
+    # Broadcast Sources back to client directly
+    yield json.dumps({"type": "sources", "data": top_results}) + "\n"
+
     # --- STEP 5: Final Neural Briefing ---
     final_prompt = f"""
     You are a Senior Medical Assistant at CuraLink. Brief the user on {query} regarding {disease}.
@@ -150,16 +209,22 @@ async def run_research(query: str, disease: str, session_id: str, location: str 
     3. STRUCTURE: Use headers: ### Condition Overview, ### {query} Insights, ### Clinical Trials, ### Evidence Citations.
     4. CITATIONS: Cite every claim with [1], [2].
     """
-    final_response = await llm.ainvoke(final_prompt)
+    
+    full_response = ""
+    async for chunk in llm.astream(final_prompt):
+        full_response += chunk.content
+        yield json.dumps({"type": "chunk", "text": chunk.content}) + "\n"
+        
     # --- STEP 6: Ragas Evaluation ---
     contexts = [str(r.get('summary', r.get('title', ''))) for r in top_results]
-    eval_result = await run_quality_check(query, contexts, final_response.content)
+    eval_result = await run_quality_check(query, contexts, full_response)
     
     thought_process = f"Analyzed {len(top_results)} sources. Focus: {location if location else 'Global'}. Decision: {intent}."
     thought_process += f" | Quality: {'PASSED' if eval_result['passed'] else 'LOW'} (Faithfulness: {eval_result['scores'].get('faithfulness', 0):.2f}, Relevancy: {eval_result['scores'].get('answer_relevancy', 0):.2f})"
     
-    return {
-        "answer": final_response.content,
-        "thought_process": thought_process,
+    yield json.dumps({
+        "type": "done",
+        "thoughts": thought_process,
+        "full_text": full_response,
         "sources": top_results
-    }
+    }) + "\n"

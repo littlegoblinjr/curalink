@@ -1,22 +1,37 @@
----
-title: Curalink
-emoji: 🏥
-colorFrom: blue
-colorTo: indigo
-sdk: docker
-app_port: 7860
-pinned: false
+# 🏥 CuraLink: Advanced Medical Intelligence Protocol
+
+CuraLink is a next-generation, agentic medical research workstation built specifically for rapid, evidence-grounded clinical briefings. It intelligently queries massive medical databases and dynamically builds concise, reliable summaries evaluated strictly by LLM-as-a-Judge safeguards.
+
 ---
 
-# Curalink: AI Medical Research Assistant 🏥🛰️
+## ⚡ Core Architecture
 
-Professional-grade, agentic clinical research workstation built for the Curalink Hackathon.
+* **Multi-Vector Live Retrieval**: Concurrently runs high-speed searches against **PubMed**, **OpenAlex**, and **ClinicalTrials.gov** to aggregate massive caches of peer-reviewed clinical data.
+* **LLM-as-a-Judge Guardrails**: Eliminates hallucination risk. Every generated medical briefing is passed through a **Ragas Verification Pipeline** that rigorously validates algorithmic *Faithfulness* and *Answer Relevancy* against the raw source evidence before delivery.
+* **Dynamic Smart Streaming**: Built-in Newline-Delimited JSON (NDJSON) engine that streams LLM tokens actively to the screen via a 60fps buffer.
+* **Neo-Glassmorphism UI**: High-fidelity, ultra-premium web dashboard featuring ambient mesh layouts, seamless "Thinking" logs, smart-scrolling, and inline validated source grids.
 
-## Features
-- **Triple-Link Retrieval**: Concurrent search across PubMed, OpenAlex, and ClinicalTrials.gov.
-- **Neural Pivot**: Intelligent routing between session memory and live internet search.
-- **Hybrid Cloud Deployment**: UI/API hosted on Hugging Face, LLM reasoning powered by Local GPU.
-- **High-Fidelity UI**: Premium medical dash with status badges and reasoning logs.
+---
 
-## Setup
-Refer to [HYBRID_DEPLOYMENT_GUIDE.md](./HYBRID_DEPLOYMENT_GUIDE.md) for local LLM bridging instructions.
+## 🛠️ Tech Stack 
+
+- **Frontend**: React, Vite, Framer Motion, Vanilla CSS (Custom Aesthetic)
+- **Backend / API**: FastAPI, Python 3.10+, Uvicorn 
+- **LLM Routing / RAG**: LangChain, Local Embeddings, Groq Acceleration
+- **Evaluation Engine**: Ragas (faithfulness checks)
+- **Database Architecture**: Motor (Async IO), MongoDB Atlas / Memory Fallbacks
+- **Deployment**: Docker, Hugging Face Spaces
+
+---
+
+## 🚀 Quick Start & Deployment
+
+CuraLink has been specifically structured for rapid containerized deployment.
+
+1. Configure backend environment keys (`.env`).
+2. Build the standalone Docker image.
+3. Access the unified application matrix locally or deploy externally via Hugging Face.
+
+---
+
+### *A CuraLink Hackathon Submission* 🛰️

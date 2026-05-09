@@ -37,19 +37,41 @@ async def close_mongo_connection():
     if db_instance.client:
         db_instance.client.close()
 
-async def save_chat_message(session_id: str, role: str, content: str):
+async def save_chat_message(session_id: str, role: str, content: str, email: str = None, topic: str = "New Research", thoughts: str = None, sources: list = None):
     if db_instance.db is not None:
-        await db_instance.db.chats.insert_one({
+        # Save the message
+        doc = {
             "session_id": session_id,
+            "email": email,
             "role": role,
             "content": content,
             "timestamp": datetime.now()
-        })
+        }
+        if thoughts: doc["thoughts"] = thoughts
+        if sources: doc["sources"] = sources
+        
+        await db_instance.db.chats.insert_one(doc)
+        # Track/Update session metadata for listing
+        if email:
+            await db_instance.db.sessions.update_one(
+                {"session_id": session_id, "email": email},
+                {"$set": {"topic": topic, "last_active": datetime.now()}},
+                upsert=True
+            )
     else:
         # Fallback to Memory
         if session_id not in MEMORY_DB:
             MEMORY_DB[session_id] = []
         MEMORY_DB[session_id].append({"role": role, "content": content})
+
+async def get_user_sessions(email: str):
+    if db_instance.db is not None:
+        cursor = db_instance.db.sessions.find({"email": email}).sort("last_active", -1)
+        sessions = await cursor.to_list(length=50)
+        for session in sessions:
+            session.pop("_id", None)
+        return sessions
+    return []
 
 async def save_session_results(session_id: str, results: List[Dict[str, Any]]):
     """Appends unique research results to the session-wide library."""
@@ -88,5 +110,86 @@ async def get_chat_history(session_id: str, limit: int = 5):
     if db_instance.db is not None:
         cursor = db_instance.db.chats.find({"session_id": session_id}).sort("timestamp", -1).limit(limit)
         messages = await cursor.to_list(length=limit)
+        for msg in messages:
+            msg.pop("_id", None)
         return messages[::-1]
     return MEMORY_DB.get(session_id, [])
+
+async def delete_session(session_id: str):
+    """Purges a session and its associated chat history completely."""
+    if db_instance.db is not None:
+        await db_instance.db.sessions.delete_one({"session_id": session_id})
+        await db_instance.db.chats.delete_many({"session_id": session_id})
+        await db_instance.db.research_archives.delete_one({"session_id": session_id})
+    else:
+        MEMORY_DB.pop(session_id, None)
+        MEMORY_DB.pop(f"arch_{session_id}", None)
+
+
+async def save_user(email: str, name: str):
+    if db_instance.db is not None:
+        await db_instance.db.users.update_one(
+            {"email": email},
+            {"$set": {"name": name, "last_login": datetime.now()}},
+            upsert=True
+        )
+
+async def get_user(email: str):
+    if db_instance.db is not None:
+        return await db_instance.db.users.find_one({"email": email})
+    return None
+
+# ============================================================
+# GLOBAL KNOWLEDGE GRAPH — Cross-session paper memory
+# ============================================================
+KNOWLEDGE_GRAPH_MEMORY: Dict[str, List] = {}  # In-memory fallback keyed by disease
+
+async def save_to_knowledge_graph(disease: str, papers: List[Dict[str, Any]]):
+    """
+    Persists all newly discovered papers into the global knowledge graph.
+    Papers are deduplicated by URL — same paper is never stored twice.
+    """
+    disease_key = disease.lower().strip()
+    if db_instance.db is not None:
+        for paper in papers:
+            url = paper.get("url")
+            if not url:
+                continue
+            # Ensure we don't accidentally pass disease_tags explicitly in $set if it's in **paper
+            paper_data = {k: v for k, v in paper.items() if k != "disease_tags"}
+            await db_instance.db.knowledge_graph.update_one(
+                {"url": url},
+                {
+                    "$set": {
+                        **paper_data,
+                        "last_seen": datetime.now()
+                    },
+                    "$addToSet": {"disease_tags": disease_key}
+                },
+                upsert=True
+            )
+    else:
+        existing_urls = {p.get("url") for p in KNOWLEDGE_GRAPH_MEMORY.get(disease_key, [])}
+        for paper in papers:
+            if paper.get("url") not in existing_urls:
+                KNOWLEDGE_GRAPH_MEMORY.setdefault(disease_key, []).append(paper)
+
+async def query_knowledge_graph(disease: str, limit: int = 30) -> List[Dict[str, Any]]:
+    """
+    Retrieves previously indexed papers relevant to this disease from the global graph.
+    Returns the most recently seen papers first.
+    """
+    disease_key = disease.lower().strip()
+    if db_instance.db is not None:
+        cursor = db_instance.db.knowledge_graph.find(
+            {"disease_tags": disease_key}
+        ).sort("last_seen", -1).limit(limit)
+        docs = await cursor.to_list(length=limit)
+        # Strip MongoDB _id and serialize datetime before returning
+        for d in docs:
+            d.pop("_id", None)
+            if "last_seen" in d and isinstance(d["last_seen"], datetime):
+                d["last_seen"] = d["last_seen"].isoformat()
+        return docs
+    return KNOWLEDGE_GRAPH_MEMORY.get(disease_key, [])[:limit]
+

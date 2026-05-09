@@ -8,7 +8,6 @@ async def test_research_pipeline():
     
     print("\n--- TURN 1: Initial Research ---")
     payload1 = {
-        "patient_name": "John Doe",
         "disease": "Parkinson's Disease",
         "query": "What are the latest treatments?",
         "session_id": session_id
@@ -19,17 +18,17 @@ async def test_research_pipeline():
         resp1 = await client.post(url, json=payload1)
         
         if resp1.status_code == 200:
-            data = resp1.json()
+            lines = [l for l in resp1.text.split('\n') if l.strip()]
+            final_data = json.loads(lines[-1])
             print("\nASSISTANT RESPONSE:")
-            print(data["data"]["answer"])
-            print(f"\nSources Found: {len(data['data']['sources'])}")
+            print(final_data.get("full_text", "No answer found"))
+            print(f"\nStream completed.")
         else:
             print(f"Error Turn 1: {resp1.status_code} - {resp1.text}")
             return
 
     print("\n--- TURN 2: Follow-up Insight ---")
     payload2 = {
-        "patient_name": "John Doe",
         "disease": "Parkinson's Disease",
         "query": "Are there any side effects for these?",
         "session_id": session_id
@@ -40,9 +39,10 @@ async def test_research_pipeline():
         resp2 = await client.post(url, json=payload2)
         
         if resp2.status_code == 200:
-            data = resp2.json()
+            lines = [l for l in resp2.text.split('\n') if l.strip()]
+            final_data = json.loads(lines[-1])
             print("\nASSISTANT RESPONSE (Context-Aware):")
-            print(data["data"]["answer"])
+            print(final_data.get("full_text", "No answer found"))
         else:
             print(f"Error Turn 2: {resp2.status_code} - {resp2.text}")
 
