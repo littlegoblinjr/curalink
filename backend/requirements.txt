@@ -18,3 +18,5 @@ ragas
 datasets
 pandas
 resend
+email-validator
+passlib[bcrypt]
