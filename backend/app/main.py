@@ -55,8 +55,8 @@ if os.path.exists(assets_dir):
     print("Assets directory found. Mounting...")
     app.mount("/assets", StaticFiles(directory=assets_dir), name="assets")
 
-# 2. SPA Catch-All Route
-@app.get("/{full_path:path}")
+# 2. SPA Catch-All Route (Supports GET for users and HEAD for health checks)
+@app.api_route("/{full_path:path}", methods=["GET", "HEAD"])
 async def serve_spa(full_path: str):
     # If a specific file is requested (like favicon.ico or vite.svg)
     file_path = os.path.join(static_dir, full_path)

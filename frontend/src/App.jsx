@@ -475,7 +475,7 @@ function App() {
           <nav className="landing-nav">
             <div className="landing-logo">
               <FlaskConical size={24} color="var(--accent-cyan)" />
-              <span>CuraLink</span>
+              <span>CuraLink <small style={{ fontSize: '0.6rem', opacity: 0.5, marginLeft: '4px' }}>v1.4.2-MODERN</small></span>
             </div>
             <div className="landing-nav-links">
               <button className="nav-login-btn" onClick={() => { setAuthMode('login'); setCurrentScreen('auth'); }}>
