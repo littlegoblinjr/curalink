@@ -22,5 +22,5 @@ COPY --from=frontend-build /app/frontend/dist /app/static
 # Expose port (HF Spaces uses 7860)
 EXPOSE 7860
 
-# Run with uvicorn
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "7860"]
+# Run with uvicorn (Respect the PORT env var for Render/HF)
+CMD uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-7860}
