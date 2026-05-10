@@ -7,8 +7,9 @@ from app.utils.ranking import normalize_results, rank_and_filter
 from app.config.database import (
     get_chat_history, save_session_results, get_session_results, 
     save_to_knowledge_graph, query_knowledge_graph,
-    find_cached_response, save_semantic_cache
+    find_cached_response, save_semantic_cache, get_all_cache_vectors
 )
+from app.utils.rag_utils import get_embeddings, cosine_similarity
 from app.config.config import settings
 from pydantic import BaseModel, Field
 from typing import List, Dict, Any
@@ -58,20 +59,41 @@ async def _extract_medical_context(history: List[Dict[str, Any]]) -> str:
         return ""
 
 async def run_research(query: str, disease: str, session_id: str, location: str = None):
-    # --- STEP -2: Semantic Cache Lookup ---
+    # --- STEP -2: TRUE SEMANTIC CACHE LOOKUP ---
+    query_norm = query.lower().strip()
+    query_embedding = None
     try:
-        cache_hit = await find_cached_response(query)
-        if cache_hit:
-            print(f"--- SEMANTIC CACHE HIT: {query} ---")
-            # Yield sources first to maintain consistent UI layout
-            yield json.dumps({"type": "sources", "data": cache_hit["sources"]}) + "\n"
+        # Tier 1: Instant Exact Match
+        cache_hit = await find_cached_response(query_norm)
+        
+        # Tier 2: Neural Semantic Match (for variations like "effect" vs "impact")
+        if not cache_hit:
+            query_embedding_list = await get_embeddings([query])
+            query_embedding = query_embedding_list[0]
             
-            # Stream the cached content to simulate responsiveness and typing feel
+            all_cached = await get_all_cache_vectors()
+            best_match = None
+            max_sim = 0
+            
+            for entry in all_cached:
+                if "embedding" in entry and entry["embedding"]:
+                    sim = cosine_similarity(query_embedding, entry["embedding"])
+                    if sim > max_sim:
+                        max_sim = sim
+                        best_match = entry
+            
+            if max_sim > 0.96: # High confidence semantic match
+                print(f"--- SEMANTIC NEURAL HIT ({max_sim:.3f}): {query} ---")
+                cache_hit = best_match["response"]
+
+        if cache_hit:
+            print(f"--- CACHE HIT: {query} ---")
+            yield json.dumps({"type": "sources", "data": cache_hit["sources"]}) + "\n"
             content = cache_hit["content"]
-            chunk_size = 40
+            chunk_size = 50
             for i in range(0, len(content), chunk_size):
                 yield json.dumps({"type": "chunk", "text": content[i:i+chunk_size]}) + "\n"
-                await asyncio.sleep(0.01) # Ultra-fast simulated stream
+                await asyncio.sleep(0.005)
             
             yield json.dumps({
                 "type": "done",
@@ -81,7 +103,14 @@ async def run_research(query: str, disease: str, session_id: str, location: str 
             }) + "\n"
             return
     except Exception as e:
-        print(f"Cache Lookup Error: {e}")
+        print(f"Semantic Cache Error: {e}")
+
+    # Ensure we have the embedding for saving later if logic falls through
+    if query_embedding is None:
+        try:
+            query_embedding_list = await get_embeddings([query])
+            query_embedding = query_embedding_list[0]
+        except: pass
 
     # --- STEP -1: Input Guardrail & Safety ---
     safety_prompt = f"""
@@ -260,10 +289,11 @@ async def run_research(query: str, disease: str, session_id: str, location: str 
 
     # Persistent Semantic Caching
     try:
-        await save_semantic_cache(query, {
-            "content": full_response,
-            "thoughts": thought_process,
-            "sources": top_results
-        })
+        if query_embedding:
+            await save_semantic_cache(query, query_embedding, {
+                "content": full_response,
+                "thoughts": thought_process,
+                "sources": top_results
+            })
     except Exception as e:
         print(f"Cache Save Error: {e}")

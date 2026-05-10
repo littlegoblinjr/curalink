@@ -200,13 +200,14 @@ async def query_knowledge_graph(disease: str, limit: int = 30) -> List[Dict[str,
 # ============================================================
 # SEMANTIC CACHE — Prompt-to-Response persistency
 # ============================================================
-async def save_semantic_cache(prompt: str, response_data: Dict[str, Any]):
-    """Saves a full research response indexed by a normalized prompt."""
+async def save_semantic_cache(prompt: str, embedding: List[float], response_data: Dict[str, Any]):
+    """Saves a full research response indexed by a normalized prompt and its neural embedding."""
     if db_instance.db is not None:
         await db_instance.db.semantic_cache.update_one(
             {"prompt_norm": prompt.lower().strip()},
             {
                 "$set": {
+                    "embedding": embedding,
                     "response": response_data,
                     "timestamp": datetime.now()
                 }
@@ -220,4 +221,11 @@ async def find_cached_response(prompt: str) -> Optional[Dict[str, Any]]:
         doc = await db_instance.db.semantic_cache.find_one({"prompt_norm": prompt.lower().strip()})
         return doc["response"] if doc else None
     return None
+
+async def get_all_cache_vectors() -> List[Dict[str, Any]]:
+    """Loads all cached prompts and their vectors for neural similarity matching."""
+    if db_instance.db is not None:
+        cursor = db_instance.db.semantic_cache.find({}, {"prompt_norm": 1, "embedding": 1, "response": 1})
+        return await cursor.to_list(length=1000)
+    return []
 
