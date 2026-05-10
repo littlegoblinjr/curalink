@@ -341,8 +341,7 @@ function App() {
                 thoughts: data.thoughts,
                 sources: data.sources,
                 isFinished: true,
-                isStreaming: false, // Force end of stream
-                content: m.buffer   // Sync content with full buffer immediately
+                // Don't set isStreaming: false here, let the drainInterval finish
               } : m));
               fetchSessions();
               setIsLoading(false);
