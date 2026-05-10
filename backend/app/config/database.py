@@ -1,5 +1,5 @@
 import os
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 from motor.motor_asyncio import AsyncIOMotorClient
 from app.config.config import settings
 from datetime import datetime
