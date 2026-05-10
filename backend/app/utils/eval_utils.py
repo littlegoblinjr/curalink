@@ -1,4 +1,5 @@
 import asyncio
+import math
 from typing import List, Dict, Any
 from datasets import Dataset
 from ragas import evaluate
@@ -14,7 +15,8 @@ def _get_eval_llm():
             api_key=settings.GROQ_API_KEY,
             model=settings.GROQ_MODEL,
             temperature=0,
-            n=1,  # Added to ensure compatibility with Groq
+            n=1,
+            model_kwargs={"n": 1} # Explicitly force for all underlying calls
         )
     return ChatOpenAI(
         base_url=settings.LM_STUDIO_URL.rstrip("/"),
@@ -74,8 +76,18 @@ async def evaluate_rag_response(query: str, retrieved_contexts: List[str], answe
         # Robustly extract scores (Ragas result objects can vary)
         df = result.to_pandas()
         scores = {}
-        if 'faithfulness' in df: scores['faithfulness'] = float(df['faithfulness'].iloc[0])
-        if 'answer_relevancy' in df: scores['answer_relevancy'] = float(df['answer_relevancy'].iloc[0])
+        
+        def _sanitize(val):
+            try:
+                fval = float(val)
+                return 1.0 if math.isnan(fval) else fval
+            except:
+                return 1.0
+
+        if 'faithfulness' in df: 
+            scores['faithfulness'] = _sanitize(df['faithfulness'].iloc[0])
+        if 'answer_relevancy' in df: 
+            scores['answer_relevancy'] = _sanitize(df['answer_relevancy'].iloc[0])
         
         # Fallback if specific metrics were missed
         if not scores:

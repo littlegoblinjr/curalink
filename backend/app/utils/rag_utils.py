@@ -36,7 +36,7 @@ async def get_embeddings(text_list: List[str]) -> List[List[float]]:
     try:
         # Stable Neural Embedding Pipeline (v1.4.3-STABLE)
         result = client.models.embed_content(
-            model="text-embedding-004",
+            model="embedding-001",
             contents=text_list
         )
         # Handle both single and batch results
