@@ -34,7 +34,7 @@ async def get_embeddings(text_list: List[str]) -> List[List[float]]:
         return []
 
     try:
-        # Gemini embedding-004 is the state of the art for medical retrieval
+        # Stable Neural Embedding Pipeline (v1.4.3-STABLE)
         result = client.models.embed_content(
             model="text-embedding-004",
             contents=text_list
