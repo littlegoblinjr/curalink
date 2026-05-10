@@ -324,12 +324,14 @@ function App() {
               setMessages(prev => prev.map(m => m.id === msgId ? { ...m, sources: data.data } : m));
             }
             else if (data.type === 'chunk') {
+              setIsLoading(false); // Failsafe to kill thinking mode once text arrives
               // Add to visual buffer instead of direct content output
               setMessages(prev => prev.map(m => m.id === msgId ? { ...m, buffer: m.buffer + data.text } : m));
             }
             else if (data.type === 'done') {
-              setMessages(prev => prev.map(m => m.id === msgId ? { ...m, thoughts: data.thoughts } : m));
+              setMessages(prev => prev.map(m => m.id === msgId ? { ...m, thoughts: data.thoughts, sources: data.sources } : m));
               fetchSessions(); // Refresh sidebar topic/date
+              setIsLoading(false);
             }
             else if (data.type === 'error') {
               setMessages(prev => prev.map(m => m.id === msgId ? { ...m, content: m.content + `\n\nERROR: ${data.message}`, isStreaming: false } : m));
