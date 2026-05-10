@@ -168,9 +168,13 @@ function App() {
             changed = true;
             return { ...m, content: m.buffer.substring(0, m.content.length + 4) };
           }
-          if (m.role === 'assistant' && m.isStreaming && m.buffer !== undefined && m.content.length >= m.buffer.length && m.thoughts) {
-            changed = true;
-            return { ...m, isStreaming: false };
+          if (m.role === 'assistant' && m.isStreaming && m.buffer !== undefined && m.content.length >= m.buffer.length) {
+            // Signal completion if the buffer is empty AND we've received the 'done' signal (thoughts) 
+            // OR if it's a simple response.
+            if (m.isFinished) {
+              changed = true;
+              return { ...m, isStreaming: false };
+            }
           }
           return m;
         });
@@ -329,7 +333,7 @@ function App() {
               setMessages(prev => prev.map(m => m.id === msgId ? { ...m, buffer: m.buffer + data.text } : m));
             }
             else if (data.type === 'done') {
-              setMessages(prev => prev.map(m => m.id === msgId ? { ...m, thoughts: data.thoughts, sources: data.sources } : m));
+              setMessages(prev => prev.map(m => m.id === msgId ? { ...m, thoughts: data.thoughts, sources: data.sources, isFinished: true } : m));
               fetchSessions(); // Refresh sidebar topic/date
               setIsLoading(false);
             }
@@ -782,9 +786,9 @@ function App() {
                   <AnimatePresence>
                     {messages.map((msg, i) => (
                       <motion.div key={i} initial={{ opacity: 0, y: 10, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} className={`chat-bubble ${msg.role}`}>
-                        {msg.role === 'assistant' && msg.thoughts && <ThoughtProcess thoughts={msg.thoughts} />}
+                        {msg.role === 'assistant' && msg.thoughts && !msg.isStreaming && <ThoughtProcess thoughts={msg.thoughts} />}
                         <FormattedText text={msg.content} onCitationClick={handleCitationClick} />
-                        {msg.role === 'assistant' && msg.sources && <SourcesList sources={msg.sources} highlightIdx={highlightIdx} />}
+                        {msg.role === 'assistant' && msg.sources && !msg.isStreaming && <SourcesList sources={msg.sources} highlightIdx={highlightIdx} />}
                       </motion.div>
                     ))}
                   </AnimatePresence>
