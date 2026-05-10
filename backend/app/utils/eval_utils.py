@@ -15,7 +15,6 @@ def _get_eval_llm():
             api_key=settings.GROQ_API_KEY,
             model=settings.GROQ_MODEL,
             temperature=0,
-            n=1,
             model_kwargs={"n": 1} # Explicitly force for all underlying calls
         )
     return ChatOpenAI(
