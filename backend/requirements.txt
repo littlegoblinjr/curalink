@@ -20,3 +20,4 @@ pandas
 resend
 email-validator
 passlib[bcrypt]
+google-genai

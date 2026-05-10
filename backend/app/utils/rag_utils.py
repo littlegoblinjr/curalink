@@ -8,71 +8,43 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 from app.config.config import settings
 
-_st_lock = threading.Lock()
-_st_model: Optional[object] = None
+from google import genai
+from app.config.config import settings
 
+# Initialize Gemini Client
+_genai_client = None
+if settings.GEMINI_API_KEY:
+    _genai_client = genai.Client(api_key=settings.GEMINI_API_KEY)
 
-def _get_sentence_transformer():
-    """Lazy-load once; default all-MiniLM-L6-v2 (384-d). Nomic-style models need trust_remote_code."""
-    global _st_model
-    if _st_model is not None:
-        return _st_model
-    with _st_lock:
-        if _st_model is not None:
-            return _st_model
-        from sentence_transformers import SentenceTransformer
-
-        trust = "nomic" in settings.EMBEDDING_MODEL.lower()
-        _st_model = SentenceTransformer(
-            settings.EMBEDDING_MODEL,
-            trust_remote_code=trust,
-        )
-    return _st_model
-
+def _get_genai_client():
+    global _genai_client
+    if _genai_client is None and settings.GEMINI_API_KEY:
+        _genai_client = genai.Client(api_key=settings.GEMINI_API_KEY)
+    return _genai_client
 
 def preload_local_embedding_model() -> None:
-    """Warm the embedding model at startup (skipped when using HTTP embeddings)."""
-    if settings.EMBEDDING_HTTP_URL.strip():
-        return
-    _get_sentence_transformer()
-
-
-def _encode_local_sync(text_list: List[str]) -> List[List[float]]:
-    model = _get_sentence_transformer()
-    vecs = model.encode(
-        text_list,
-        batch_size=min(32, max(1, len(text_list))),
-        show_progress_bar=False,
-        convert_to_numpy=True,
-    )
-    return [row.tolist() for row in vecs]
-
+    """No-op for Gemini as it is a cloud API."""
+    pass
 
 async def get_embeddings(text_list: List[str]) -> List[List[float]]:
-    """OpenAI-compatible HTTP endpoint, or local SentenceTransformer if URL unset."""
-    url = settings.EMBEDDING_HTTP_URL.strip()
-    if url:
-        async with httpx.AsyncClient() as client:
-            try:
-                resp = await client.post(
-                    url,
-                    json={
-                        "input": text_list,
-                        "model": settings.EMBEDDING_HTTP_MODEL,
-                    },
-                    timeout=60.0,
-                )
-                resp.raise_for_status()
-                data = resp.json()
-                return [e["embedding"] for e in data["data"]]
-            except Exception as e:
-                print(f"Embedding HTTP failed: {e}")
-                return []
+    """Fetches embeddings using Gemini API."""
+    client = _get_genai_client()
+    if not client:
+        print("Gemini API Key missing. Falling back to empty embeddings.")
+        return []
 
     try:
-        return await asyncio.to_thread(_encode_local_sync, text_list)
+        # Gemini embedding-004 is the state of the art for medical retrieval
+        result = client.models.embed_content(
+            model="text-embedding-004",
+            contents=text_list
+        )
+        # Handle both single and batch results
+        if hasattr(result.embeddings, '__iter__'):
+            return [e.values for e in result.embeddings]
+        return [result.embeddings.values]
     except Exception as e:
-        print(f"Embedding local model failed: {e}")
+        print(f"Gemini Embedding failed: {e}")
         return []
 
 
