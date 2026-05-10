@@ -491,7 +491,7 @@ function App() {
           <nav className="landing-nav">
             <div className="landing-logo">
               <FlaskConical size={24} color="var(--accent-cyan)" />
-              <span>CuraLink <small style={{ fontSize: '0.6rem', opacity: 0.5, marginLeft: '4px' }}>v1.4.2-MODERN</small></span>
+              <span>CuraLink <small style={{ fontSize: '0.6rem', opacity: 0.5, marginLeft: '4px' }}>v1.4.3-STABLE</small></span>
             </div>
             <div className="landing-nav-links">
               <button className="nav-login-btn" onClick={() => { setAuthMode('login'); setCurrentScreen('auth'); }}>
@@ -532,7 +532,7 @@ function App() {
                   <p>Verified Grounding</p>
                 </div>
                 <div className="stat-item">
-                  <h3>{"<"}1s</h3>
+                  <h3>{"<"}3s</h3>
                   <p>Deep-Dive Latency</p>
                 </div>
               </div>
