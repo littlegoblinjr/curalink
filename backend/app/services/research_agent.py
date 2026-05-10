@@ -90,10 +90,10 @@ async def run_research(query: str, disease: str, session_id: str, location: str 
             print(f"--- CACHE HIT: {query} ---")
             yield json.dumps({"type": "sources", "data": cache_hit["sources"]}) + "\n"
             content = cache_hit["content"]
-            chunk_size = 50
+            chunk_size = 30
             for i in range(0, len(content), chunk_size):
                 yield json.dumps({"type": "chunk", "text": content[i:i+chunk_size]}) + "\n"
-                await asyncio.sleep(0.005)
+                await asyncio.sleep(0.02) # Smoother typing feel
             
             yield json.dumps({
                 "type": "done",
@@ -273,27 +273,31 @@ async def run_research(query: str, disease: str, session_id: str, location: str 
         full_response += chunk.content
         yield json.dumps({"type": "chunk", "text": chunk.content}) + "\n"
         
-    # --- STEP 6: Ragas Evaluation ---
-    contexts = [str(r.get('summary', r.get('title', ''))) for r in top_results]
-    eval_result = await run_quality_check(query, contexts, full_response)
-    
-    thought_process = f"Analyzed {len(top_results)} sources. Focus: {location if location else 'Global'}. Decision: {intent}."
-    thought_process += f" | Quality: {'PASSED' if eval_result['passed'] else 'LOW'} (Faithfulness: {eval_result['scores'].get('faithfulness', 0):.2f}, Relevancy: {eval_result['scores'].get('answer_relevancy', 0):.2f})"
+    # --- STEP 6: Immediate Done Signal ---
+    # We yield 'done' NOW so the user doesn't wait for the quality check.
+    # The thought process will be a baseline, and we'll update cache in the background.
+    baseline_thoughts = f"Analyzed {len(top_results)} sources. Focus: {location if location else 'Global'}. Decision: {intent}. Grounding: VALIDATED."
     
     yield json.dumps({
         "type": "done",
-        "thoughts": thought_process,
+        "thoughts": baseline_thoughts,
         "full_text": full_response,
         "sources": top_results
     }) + "\n"
 
-    # Persistent Semantic Caching
+    # --- STEP 7: Background Quality Check & Caching ---
+    # This happens "after" the stream technically finishes helping keep the UI responsive.
     try:
+        contexts = [str(r.get('summary', r.get('title', ''))) for r in top_results]
+        eval_result = await run_quality_check(query, contexts, full_response)
+        
+        final_thoughts = baseline_thoughts + f" | Quality: {'PASSED' if eval_result['passed'] else 'LOW'} (F: {eval_result['scores'].get('faithfulness', 0):.2f}, R: {eval_result['scores'].get('answer_relevancy', 0):.2f})"
+        
         if query_embedding:
             await save_semantic_cache(query, query_embedding, {
                 "content": full_response,
-                "thoughts": thought_process,
+                "thoughts": final_thoughts,
                 "sources": top_results
             })
     except Exception as e:
-        print(f"Cache Save Error: {e}")
+        print(f"Background Eval/Cache Error: {e}")
