@@ -333,8 +333,15 @@ function App() {
               setMessages(prev => prev.map(m => m.id === msgId ? { ...m, buffer: m.buffer + data.text } : m));
             }
             else if (data.type === 'done') {
-              setMessages(prev => prev.map(m => m.id === msgId ? { ...m, thoughts: data.thoughts, sources: data.sources, isFinished: true } : m));
-              fetchSessions(); // Refresh sidebar topic/date
+              setMessages(prev => prev.map(m => m.id === msgId ? {
+                ...m,
+                thoughts: data.thoughts,
+                sources: data.sources,
+                isFinished: true,
+                isStreaming: false, // Force end of stream
+                content: m.buffer   // Sync content with full buffer immediately
+              } : m));
+              fetchSessions();
               setIsLoading(false);
             }
             else if (data.type === 'error') {

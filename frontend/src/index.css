@@ -24,9 +24,14 @@ body {
   background-color: var(--bg-deep);
   color: var(--text-main);
   height: 100vh;
-  width: 100vw;
-  overflow: hidden;
+  width: 100%;
+  overflow-x: hidden;
+  overflow-y: hidden;
   position: relative;
+}
+
+html {
+  overflow-x: hidden;
 }
 
 /* Ambient Background Blobs */
@@ -485,12 +490,13 @@ h5 {
   position: absolute;
   top: 0;
   left: 0;
-  width: 100vw;
+  width: 100%;
   height: 100vh;
   z-index: 10;
   display: flex;
   flex-direction: column;
   overflow-y: auto;
+  overflow-x: hidden;
   background: radial-gradient(circle at 10% 20%, rgba(20, 20, 25, 0.4), transparent),
     radial-gradient(circle at 90% 80%, rgba(10, 40, 60, 0.3), transparent);
 }
@@ -502,6 +508,7 @@ h5 {
   padding: 24px 60px;
   width: 100%;
   box-sizing: border-box;
+  overflow-x: hidden;
 }
 
 .landing-logo {
@@ -604,6 +611,7 @@ h5 {
 .text-gradient {
   background: linear-gradient(to right, #38bdf8, #818cf8);
   -webkit-background-clip: text;
+  background-clip: text;
   -webkit-text-fill-color: transparent;
 }
 
@@ -685,7 +693,7 @@ h5 {
   align-items: center;
   justify-content: center;
   height: 100vh;
-  width: 100vw;
+  width: 100%;
   position: absolute;
   top: 0;
   left: 0;
@@ -845,7 +853,7 @@ h5 {
   position: fixed;
   top: 0;
   left: 0;
-  width: 100vw;
+  width: 100%;
   height: 100vh;
   background: rgba(0, 0, 0, 0.7);
   backdrop-filter: blur(8px);
@@ -1003,7 +1011,7 @@ h5 {
 .app-shell {
   display: flex;
   height: 100vh;
-  width: 100vw;
+  width: 100%;
   background: #050505;
   overflow: hidden;
 }
