@@ -197,3 +197,27 @@ async def query_knowledge_graph(disease: str, limit: int = 30) -> List[Dict[str,
         return docs
     return KNOWLEDGE_GRAPH_MEMORY.get(disease_key, [])[:limit]
 
+# ============================================================
+# SEMANTIC CACHE — Prompt-to-Response persistency
+# ============================================================
+async def save_semantic_cache(prompt: str, response_data: Dict[str, Any]):
+    """Saves a full research response indexed by a normalized prompt."""
+    if db_instance.db is not None:
+        await db_instance.db.semantic_cache.update_one(
+            {"prompt_norm": prompt.lower().strip()},
+            {
+                "$set": {
+                    "response": response_data,
+                    "timestamp": datetime.now()
+                }
+            },
+            upsert=True
+        )
+
+async def find_cached_response(prompt: str) -> Optional[Dict[str, Any]]:
+    """Retrieves a cached response if the prompt is an exact or normalized match."""
+    if db_instance.db is not None:
+        doc = await db_instance.db.semantic_cache.find_one({"prompt_norm": prompt.lower().strip()})
+        return doc["response"] if doc else None
+    return None
+

@@ -4,7 +4,11 @@ from app.utils.eval_utils import run_quality_check
 from langchain_openai import ChatOpenAI
 from app.services.tools import search_pubmed_metadata, fetch_pubmed_abstracts, search_openalex, search_clinical_trials, fetch_pmc_fulltext
 from app.utils.ranking import normalize_results, rank_and_filter
-from app.config.database import get_chat_history, save_session_results, get_session_results, save_to_knowledge_graph, query_knowledge_graph
+from app.config.database import (
+    get_chat_history, save_session_results, get_session_results, 
+    save_to_knowledge_graph, query_knowledge_graph,
+    find_cached_response, save_semantic_cache
+)
 from app.config.config import settings
 from pydantic import BaseModel, Field
 from typing import List, Dict, Any
@@ -54,6 +58,31 @@ async def _extract_medical_context(history: List[Dict[str, Any]]) -> str:
         return ""
 
 async def run_research(query: str, disease: str, session_id: str, location: str = None):
+    # --- STEP -2: Semantic Cache Lookup ---
+    try:
+        cache_hit = await find_cached_response(query)
+        if cache_hit:
+            print(f"--- SEMANTIC CACHE HIT: {query} ---")
+            # Yield sources first to maintain consistent UI layout
+            yield json.dumps({"type": "sources", "data": cache_hit["sources"]}) + "\n"
+            
+            # Stream the cached content to simulate responsiveness and typing feel
+            content = cache_hit["content"]
+            chunk_size = 40
+            for i in range(0, len(content), chunk_size):
+                yield json.dumps({"type": "chunk", "text": content[i:i+chunk_size]}) + "\n"
+                await asyncio.sleep(0.01) # Ultra-fast simulated stream
+            
+            yield json.dumps({
+                "type": "done",
+                "thoughts": cache_hit.get("thoughts", "Retrieved from neural memory."),
+                "full_text": content,
+                "sources": cache_hit["sources"]
+            }) + "\n"
+            return
+    except Exception as e:
+        print(f"Cache Lookup Error: {e}")
+
     # --- STEP -1: Input Guardrail & Safety ---
     safety_prompt = f"""
     Analyze the following user query for a Medical Research Assistant.
@@ -228,3 +257,13 @@ async def run_research(query: str, disease: str, session_id: str, location: str 
         "full_text": full_response,
         "sources": top_results
     }) + "\n"
+
+    # Persistent Semantic Caching
+    try:
+        await save_semantic_cache(query, {
+            "content": full_response,
+            "thoughts": thought_process,
+            "sources": top_results
+        })
+    except Exception as e:
+        print(f"Cache Save Error: {e}")
