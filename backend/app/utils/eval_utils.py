@@ -61,14 +61,19 @@ async def evaluate_rag_response(query: str, retrieved_contexts: List[str], answe
         
         eval_llm = _get_eval_llm()
         eval_embeddings = LocalEmbeddings()
+
+        # Build metrics list and explicitly bind LLM
+        # This prevents Ragas from defaulting to its own sampler which might use n > 1
+        metrics = [faithfulness, answer_relevancy]
         
         # Run synchronous Ragas evaluation in a thread pool to avoid blocking Event Loop
         def _run_eval():
             return evaluate(
                 dataset,
-                metrics=[faithfulness, answer_relevancy],
+                metrics=metrics,
                 llm=eval_llm,
-                embeddings=eval_embeddings
+                embeddings=eval_embeddings,
+                init_with_llm=True # Force all metrics to use our eval_llm
             )
 
         result = await asyncio.to_thread(_run_eval)
