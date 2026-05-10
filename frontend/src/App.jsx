@@ -782,9 +782,9 @@ function App() {
                   <AnimatePresence>
                     {messages.map((msg, i) => (
                       <motion.div key={i} initial={{ opacity: 0, y: 10, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} className={`chat-bubble ${msg.role}`}>
-                        {msg.role === 'assistant' && msg.thoughts && !msg.isStreaming && <ThoughtProcess thoughts={msg.thoughts} />}
+                        {msg.role === 'assistant' && msg.thoughts && <ThoughtProcess thoughts={msg.thoughts} />}
                         <FormattedText text={msg.content} onCitationClick={handleCitationClick} />
-                        {msg.role === 'assistant' && msg.thoughts && msg.sources && !msg.isStreaming && <SourcesList sources={msg.sources} highlightIdx={highlightIdx} />}
+                        {msg.role === 'assistant' && msg.sources && <SourcesList sources={msg.sources} highlightIdx={highlightIdx} />}
                       </motion.div>
                     ))}
                   </AnimatePresence>
