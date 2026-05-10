@@ -311,15 +311,18 @@ function App() {
 
       const reader = response.body.getReader();
       const decoder = new TextDecoder("utf-8");
+      let lineBuffer = "";
 
       while (true) {
         const { value, done } = await reader.read();
         if (done) break;
 
-        const textChunk = decoder.decode(value, { stream: true });
-        const lines = textChunk.split('\n').filter(l => l.trim().length > 0);
+        lineBuffer += decoder.decode(value, { stream: true });
+        const lines = lineBuffer.split('\n');
+        lineBuffer = lines.pop(); // Keep partial line for next chunk
 
         for (const line of lines) {
+          if (!line.trim()) continue;
           try {
             const data = JSON.parse(line);
 
